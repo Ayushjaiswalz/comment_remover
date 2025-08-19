@@ -223,7 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 		$base = basename($rel);
 		$dotPos = strrpos($base, '.');
 		$stem = $dotPos !== false ? substr($base, 0, $dotPos) : $base;
-		$zipPath = ($dir ? ($dir . '/') : '') . $stem . '.clean.php';
+		$zipPath = ($dir ? ($dir . '/') : '') . $stem . '.php';
 
 		$zip->addFromString($zipPath, $cleanCode);
 	}
