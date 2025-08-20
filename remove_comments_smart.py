@@ -778,7 +778,16 @@ def remove_comments_smart(content):
 def create_web_server():
     """Create and configure the Flask web server"""
     app = Flask(__name__)
-    CORS(app)
+    
+    # Configure CORS more comprehensively
+    CORS(app, resources={
+        r"/*": {
+            "origins": "*",
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+            "supports_credentials": True
+        }
+    })
     
     # Force JSON responses for all errors
     app.config['PROPAGATE_EXCEPTIONS'] = True
@@ -851,6 +860,28 @@ def create_web_server():
         return jsonify({
             'status': 'ok',
             'message': 'Upload endpoint is accessible',
+            'timestamp': str(datetime.datetime.now())
+        })
+    
+    @app.route('/test-post', methods=['POST'])
+    def test_post():
+        """Test POST method to see if Render blocks all POST requests"""
+        print("DEBUG: Test POST endpoint called")
+        return jsonify({
+            'status': 'ok',
+            'message': 'POST method is working',
+            'method': request.method,
+            'timestamp': str(datetime.datetime.now())
+        })
+    
+    @app.route('/test-post-get', methods=['GET', 'POST'])
+    def test_post_get():
+        """Test both GET and POST methods"""
+        print(f"DEBUG: Test POST/GET endpoint called with method: {request.method}")
+        return jsonify({
+            'status': 'ok',
+            'message': f'{request.method} method is working',
+            'method': request.method,
             'timestamp': str(datetime.datetime.now())
         })
     
