@@ -300,6 +300,7 @@ def is_simple_comment(comment_text):
         return False
     
     # Check if comment contains links, URLs, or iframe tags FIRST (should be removed)
+    # These patterns indicate the comment contains a link/URL, not code with a link
     link_patterns = [
         r'https?://',  # http:// or https://
         r'ftp://',     # ftp://
@@ -324,9 +325,81 @@ def is_simple_comment(comment_text):
     ]
     
     print(f"DEBUG: Checking comment: '{clean_text}'")
+    
+    # Check if comment contains links, URLs, or iframe tags
+    link_found = False
     for pattern in link_patterns:
         if re.search(pattern, clean_text, re.IGNORECASE):
-            print(f"DEBUG: Pattern '{pattern}' matched - removing comment")
+            print(f"DEBUG: Pattern '{pattern}' matched")
+            link_found = True
+            break
+    
+    # If a link is found, check if this is a PURE link comment or a useful comment with a link
+    if link_found:
+        # Check if this is a pure link comment (just a URL/iframe, no useful description)
+        pure_link_patterns = [
+            r'^\s*(?:https?://|ftp://|file://|www\.|\.com|\.org|\.net|\.io)',  # Starts with URL
+            r'^\s*<iframe.*?>\s*$',  # Just an iframe tag
+            r'^\s*<a\s+href.*?>\s*$',  # Just an anchor tag
+            r'^\s*powerbi\.com',  # Just powerbi.com
+        ]
+        
+        for pattern in pure_link_patterns:
+            if re.search(pattern, clean_text, re.IGNORECASE | re.DOTALL):
+                print(f"DEBUG: Pure link pattern '{pattern}' matched - removing comment")
+                return False
+        
+        # If it's not a pure link comment, check if it has useful descriptive text
+        # Remove common link patterns to see what's left
+        temp_text = clean_text
+        for pattern in link_patterns:
+            temp_text = re.sub(pattern, '', temp_text, flags=re.IGNORECASE)
+        
+        # If there's meaningful text left after removing links, check if it's actually useful
+        meaningful_text = temp_text.strip()
+        
+        # Check if the remaining text contains code-like patterns that indicate it should be removed
+        code_like_patterns = [
+            r'window\.location',  # JavaScript navigation
+            r'location\.href',     # JavaScript location
+            r'\.href\s*=',         # href assignment
+            r'\.src\s*=',          # src assignment
+            r'\.action\s*=',       # action assignment
+            r'function\s*\(',      # function definition
+            r'if\s*\(',            # if statement
+            r'for\s*\(',           # for loop
+            r'while\s*\(',         # while loop
+            r'var\s+',             # variable declaration
+            r'let\s+',             # let declaration
+            r'const\s+',           # const declaration
+            r'console\.',          # console methods
+            r'alert\s*\(',         # alert function
+            r'confirm\s*\(',       # confirm function
+            r'prompt\s*\(',        # prompt function
+            r'\.addEventListener', # event listener
+            r'\.onclick',          # onclick handler
+            r'\.submit',           # form submit
+            r'\.preventDefault',   # prevent default
+            r'\.stopPropagation', # stop propagation
+            r'return\s+',          # return statement
+            r'throw\s+',           # throw statement
+            r'try\s*{',            # try block
+            r'catch\s*\(',         # catch block
+            r'finally\s*{',        # finally block
+        ]
+        
+        # If the remaining text contains code-like patterns, remove the comment
+        for pattern in code_like_patterns:
+            if re.search(pattern, meaningful_text, re.IGNORECASE):
+                print(f"DEBUG: Code-like pattern '{pattern}' found in remaining text - removing comment")
+                return False
+        
+        # If there's substantial descriptive text AND no code-like patterns, keep it
+        if len(meaningful_text) > 10:
+            print(f"DEBUG: Comment has meaningful text after removing links: '{meaningful_text}' - keeping comment")
+            return True
+        else:
+            print(f"DEBUG: Comment is mostly just links - removing comment")
             return False
     
     print(f"DEBUG: No link patterns matched - keeping comment")
@@ -406,8 +479,38 @@ def remove_html_comments_intelligent(content):
             r'title=',     # title attribute
         ]
         
+        # Check if comment contains links, URLs, or iframe tags
+        link_found = False
         for pattern in link_patterns:
             if re.search(pattern, clean_text, re.IGNORECASE):
+                link_found = True
+                break
+        
+        # If a link is found, check if this is a PURE link comment or a useful comment with a link
+        if link_found:
+            # Check if this is a pure link comment (just a URL/iframe, no useful description)
+            pure_link_patterns = [
+                r'^\s*(?:https?://|ftp://|file://|www\.|\.com|\.org|\.net|\.io)',  # Starts with URL
+                r'^\s*<iframe.*?>\s*$',  # Just an iframe tag
+                r'^\s*<a\s+href.*?>\s*$',  # Just an anchor tag
+                r'^\s*powerbi\.com',  # Just powerbi.com
+            ]
+            
+            for pattern in pure_link_patterns:
+                if re.search(pattern, clean_text, re.IGNORECASE | re.DOTALL):
+                    return False
+            
+            # If it's not a pure link comment, check if it has useful descriptive text
+            # Remove common link patterns to see what's left
+            temp_text = clean_text
+            for pattern in link_patterns:
+                temp_text = re.sub(pattern, '', temp_text, flags=re.IGNORECASE)
+            
+            # If there's meaningful text left after removing links, keep it
+            meaningful_text = temp_text.strip()
+            if len(meaningful_text) > 10:  # If there's substantial descriptive text
+                return True
+            else:
                 return False
         
         # Keep simple descriptive comments like "test this", "section header", etc.
@@ -482,8 +585,38 @@ def remove_multiline_comments_intelligent(content):
             r'title=',     # title attribute
         ]
         
+        # Check if comment contains links, URLs, or iframe tags
+        link_found = False
         for pattern in link_patterns:
             if re.search(pattern, clean_text, re.IGNORECASE):
+                link_found = True
+                break
+        
+        # If a link is found, check if this is a PURE link comment or a useful comment with a link
+        if link_found:
+            # Check if this is a pure link comment (just a URL/iframe, no useful description)
+            pure_link_patterns = [
+                r'^\s*(?:https?://|ftp://|file://|www\.|\.com|\.org|\.net|\.io)',  # Starts with URL
+                r'^\s*<iframe.*?>\s*$',  # Just an iframe tag
+                r'^\s*<a\s+href.*?>\s*$',  # Just an anchor tag
+                r'^\s*powerbi\.com',  # Just powerbi.com
+            ]
+            
+            for pattern in pure_link_patterns:
+                if re.search(pattern, clean_text, re.IGNORECASE | re.DOTALL):
+                    return False
+            
+            # If it's not a pure link comment, check if it has useful descriptive text
+            # Remove common link patterns to see what's left
+            temp_text = clean_text
+            for pattern in link_patterns:
+                temp_text = re.sub(pattern, '', temp_text, flags=re.IGNORECASE)
+            
+            # If there's meaningful text left after removing links, keep it
+            meaningful_text = temp_text.strip()
+            if len(meaningful_text) > 10:  # If there's substantial descriptive text
+                return True
+            else:
                 return False
         
         # Keep simple descriptive comments like "this is a test", "section header", etc.
@@ -529,24 +662,68 @@ def process_single_line_comments(content):
                 result_lines.append(line_content)
                 continue
             
-            # Check if comment should be kept
-            print(f"DEBUG: Processing comment: '{comment_part}'")
-            if is_simple_comment(comment_part):
-                print(f"DEBUG: Keeping comment: '{comment_part}'")
-                # Keep the comment with EXACT original spacing
+            # Check if this is an HTML attribute with a URL (like src="https://...")
+            # This prevents treating HTML attributes as comments
+            html_attrs = [
+                'src=', 'href=', 'action=', 'data-', 'url=', 'link=', 'api=', 'cdn=',
+                'script=', 'style=', 'img=', 'video=', 'audio=', 'source=', 'track=',
+                'embed=', 'object=', 'param=', 'iframe=', 'frame=', 'form=', 'input='
+            ]
+            if any(attr in code_part.lower() for attr in html_attrs):
+                # This is an HTML attribute, not a comment - keep the line as is
+                result_lines.append(line_content)
+                continue
+            
+            # Additional protection: Check if this looks like HTML content (not a comment)
+            # This prevents treating HTML tags and attributes as comments
+            if any(html_indicator in code_part.lower() for html_indicator in ['<script', '<link', '<img', '<a ', '<form', '<iframe', '<embed', '<object']):
+                # This is HTML content, not a comment - keep the line as is
+                result_lines.append(line_content)
+                continue
+            
+            # SIMPLIFIED LOGIC: If comment contains URL or code patterns, remove it
+            # Check if comment contains URLs
+            url_patterns = [r'https?://', r'ftp://', r'file://', r'www\.', r'\.com', r'\.org', r'\.net', r'\.io', r'\.gov', r'\.edu']
+            has_url = any(re.search(pattern, comment_part, re.IGNORECASE) for pattern in url_patterns)
+            
+            # Check if comment contains code patterns
+            code_patterns = [
+                r'window\.location', r'location\.href', r'\.href\s*=', r'\.src\s*=', r'\.action\s*=',
+                r'function\s*\(', r'if\s*\(', r'for\s*\(', r'while\s*\(', r'var\s+', r'let\s+', r'const\s+',
+                r'console\.', r'alert\s*\(', r'confirm\s*\(', r'prompt\s*\(', r'\.addEventListener',
+                r'\.onclick', r'\.submit', r'\.preventDefault', r'\.stopPropagation', r'return\s+', r'throw\s+',
+                r'try\s*{', r'catch\s*\(', r'finally\s*{', r'<iframe', r'<script', r'<a\s+href'
+            ]
+            has_code = any(re.search(pattern, comment_part, re.IGNORECASE) for pattern in code_patterns)
+            
+            # If comment has URL or code patterns, remove it
+            if has_url or has_code:
+                print(f"DEBUG: Comment contains URL or code patterns - removing: '{comment_part}'")
                 if code_part.strip():
-                    # Preserve the exact original spacing before //
-                    result_lines.append(line_content)
-                else:
-                    result_lines.append(f"//{comment_part}")
-            else:
-                # Remove the comment, keep only the code part with original spacing
-                print(f"DEBUG: Removing comment: {comment_part}")
-                if code_part.strip():
+                    # Keep the code part, remove the comment
                     result_lines.append(code_part.rstrip())
                 else:
-                    # Don't add empty lines - skip them completely
+                    # No code part, skip the entire line
                     continue
+            else:
+                # Check if comment should be kept using the existing logic
+                print(f"DEBUG: Processing comment: '{comment_part}'")
+                if is_simple_comment(comment_part):
+                    print(f"DEBUG: Keeping comment: '{comment_part}'")
+                    # Keep the comment with EXACT original spacing
+                    if code_part.strip():
+                        # Preserve the exact original spacing before //
+                        result_lines.append(line_content)
+                    else:
+                        result_lines.append(f"//{comment_part}")
+                else:
+                    # Remove the comment, keep only the code part with original spacing
+                    print(f"DEBUG: Removing comment: {comment_part}")
+                    if code_part.strip():
+                        result_lines.append(code_part.rstrip())
+                    else:
+                        # Don't add empty lines - skip them completely
+                        continue
         else:
             # No // comment in this line, keep it as is
             result_lines.append(line_content)
@@ -602,6 +779,23 @@ def create_web_server():
     app = Flask(__name__)
     CORS(app)
     
+    # Add error handlers to ensure JSON responses
+    @app.errorhandler(400)
+    def bad_request(error):
+        return jsonify({'error': 'Bad request', 'details': str(error)}), 400
+    
+    @app.errorhandler(404)
+    def not_found(error):
+        return jsonify({'error': 'Not found', 'details': str(error)}), 404
+    
+    @app.errorhandler(500)
+    def internal_error(error):
+        return jsonify({'error': 'Internal server error', 'details': str(error)}), 500
+    
+    @app.errorhandler(Exception)
+    def handle_exception(e):
+        return jsonify({'error': 'Unhandled exception', 'details': str(e)}), 500
+    
     @app.route('/')
     def index():
         """Serve the main HTML page"""
@@ -611,6 +805,16 @@ def create_web_server():
     def health():
         """Health check endpoint"""
         return jsonify({'status': 'healthy', 'message': 'Server is running'})
+    
+    @app.route('/test-json')
+    def test_json():
+        """Test JSON response"""
+        return jsonify({'test': True, 'message': 'JSON is working'})
+    
+    @app.route('/test-simple')
+    def test_simple():
+        """Test simple text response"""
+        return "Simple text response - Flask is working"
     
     # Store processed files in memory for direct download
     processed_files = {}
@@ -623,7 +827,14 @@ def create_web_server():
             print(f"DEBUG: Request method: {request.method}")
             print(f"DEBUG: Request files: {list(request.files.keys())}")
             print(f"DEBUG: Request form: {list(request.form.keys())}")
+            print(f"DEBUG: Content-Type: {request.content_type}")
+            print(f"DEBUG: Content-Length: {request.content_length}")
             
+            # Ensure this is a POST request
+            if request.method != 'POST':
+                return jsonify({'error': 'Method not allowed'}), 405
+            
+            # Check if files are present
             if 'files' not in request.files:
                 print("DEBUG: No files in request.files")
                 return jsonify({'error': 'No files provided'}), 400
@@ -722,17 +933,21 @@ def create_web_server():
                 return jsonify({'error': 'No valid files processed'}), 400
             
             print(f"DEBUG: Returning success with {len(results)} results")
-            return jsonify({
+            response_data = {
                 'success': True,
                 'results': results,
                 'message': f'Successfully processed {len(results)} file(s)'
-            })
+            }
+            print(f"DEBUG: Response data: {response_data}")
+            return jsonify(response_data)
             
         except Exception as e:
             print(f"DEBUG: Unexpected error in process_files: {str(e)}")
             import traceback
             traceback.print_exc()
-            return jsonify({'error': f'Server error: {str(e)}'}), 500
+            error_response = {'error': f'Server error: {str(e)}'}
+            print(f"DEBUG: Error response: {error_response}")
+            return jsonify(error_response), 500
     
     @app.route('/api/download/<filename>')
     def download_file(filename):
@@ -862,10 +1077,30 @@ def main():
         print("💾 Files processed in memory - direct download, no disk storage")
         print("\nPress Ctrl+C to stop the server")
         
-        app = create_web_server()
-        # Get port from environment variable (for Render) or use 5000 for local development
-        port = int(os.environ.get('PORT', 5000))
-        app.run(host='0.0.0.0', port=port, debug=False)
+        try:
+            print("DEBUG: Creating Flask app...")
+            app = create_web_server()
+            print("DEBUG: Flask app created successfully")
+            
+            # Get port from environment variable (for Render) or use 5000 for local development
+            port = int(os.environ.get('PORT', 5000))
+            print(f"DEBUG: Starting Flask app on port {port}")
+            print(f"DEBUG: Environment: {os.environ.get('RENDER', 'local')}")
+            
+            # Configure for production
+            app.config['ENV'] = 'production'
+            app.config['DEBUG'] = False
+            app.config['TESTING'] = False
+            
+            print("DEBUG: Starting Flask server...")
+            app.run(host='0.0.0.0', port=port, debug=False)
+            
+        except Exception as e:
+            print(f"DEBUG: Error starting Flask app: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+        
         return
     
     # CLI mode
