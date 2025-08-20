@@ -607,6 +607,11 @@ def create_web_server():
         """Serve the main HTML page"""
         return HTML_TEMPLATE
     
+    @app.route('/health')
+    def health():
+        """Health check endpoint"""
+        return jsonify({'status': 'healthy', 'message': 'Server is running'})
+    
     # Store processed files in memory for direct download
     processed_files = {}
     
@@ -614,76 +619,109 @@ def create_web_server():
     def process_files():
         """Process uploaded files and return cleaned versions"""
         try:
+            print("DEBUG: /api/process-files called")
+            print(f"DEBUG: Request method: {request.method}")
+            print(f"DEBUG: Request files: {list(request.files.keys())}")
+            print(f"DEBUG: Request form: {list(request.form.keys())}")
+            
             if 'files' not in request.files:
+                print("DEBUG: No files in request.files")
                 return jsonify({'error': 'No files provided'}), 400
             
             files = request.files.getlist('files')
-            options = json.loads(request.form.get('options', '{}'))
+            print(f"DEBUG: Got {len(files)} files")
+            
+            # Safely get options with error handling
+            try:
+                options = json.loads(request.form.get('options', '{}'))
+            except json.JSONDecodeError as e:
+                print(f"DEBUG: JSON decode error for options: {e}")
+                options = {}
             
             if not files:
+                print("DEBUG: No files selected")
                 return jsonify({'error': 'No files selected'}), 400
             
             results = []
             processed_files.clear()  # Clear previous files
             
-            for file in files:
+            for i, file in enumerate(files):
                 if file.filename == '':
+                    print(f"DEBUG: Skipping empty filename at index {i}")
                     continue
                 
-                # Read file content - use same method as CLI for consistency
-                file_content = file.read()
-                content = file_content.decode('utf-8', errors='ignore')
-                original_size = len(content)
+                print(f"DEBUG: Processing file {i+1}/{len(files)}: {file.filename}")
                 
-                # Process the content using the exact same function as CLI
-                print(f"DEBUG: Processing {file.filename}")
-                print(f"DEBUG: Original content length: {len(content)} chars, {len(content.split(chr(10)))} lines")
-                
-                cleaned_content = remove_comments_smart_clean(content)
-                cleaned_size = len(cleaned_content)
-                
-                print(f"DEBUG: Cleaned content length: {len(cleaned_content)} chars, {len(cleaned_content.split(chr(10)))} lines")
-                
-                # Keep original filename
-                cleaned_filename = secure_filename(file.filename)
-                
-                # Store cleaned content in memory instead of saving to disk
-                processed_files[cleaned_filename] = cleaned_content
-                
-                results.append({
-                    'originalName': file.filename,
-                    'cleanedName': cleaned_filename,
-                    'originalSize': original_size,
-                    'cleanedSize': cleaned_size
-                })
+                try:
+                    # Read file content - use same method as CLI for consistency
+                    file_content = file.read()
+                    content = file_content.decode('utf-8', errors='ignore')
+                    original_size = len(content)
+                    
+                    print(f"DEBUG: File {file.filename} - Original: {len(content)} chars, {len(content.split(chr(10)))} lines")
+                    
+                    cleaned_content = remove_comments_smart_clean(content)
+                    cleaned_size = len(cleaned_content)
+                    
+                    print(f"DEBUG: File {file.filename} - Cleaned: {len(cleaned_content)} chars, {len(cleaned_content.split(chr(10)))} lines")
+                    
+                    # Keep original filename
+                    cleaned_filename = secure_filename(file.filename)
+                    
+                    # Store cleaned content in memory instead of saving to disk
+                    processed_files[cleaned_filename] = cleaned_content
+                    
+                    results.append({
+                        'originalName': file.filename,
+                        'cleanedName': cleaned_filename,
+                        'originalSize': original_size,
+                        'cleanedSize': cleaned_size
+                    })
+                    
+                    print(f"DEBUG: Successfully processed {file.filename}")
+                    
+                except Exception as file_error:
+                    print(f"DEBUG: Error processing file {file.filename}: {str(file_error)}")
+                    # Continue with other files instead of failing completely
+                    continue
             
             # Create zip file in memory if multiple files were processed
             if len(results) > 1:
-                zip_filename = f"cleaned_files_{len(results)}_files.zip"
-                
-                # Create zip file in memory
-                zip_buffer = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
-                with zipfile.ZipFile(zip_buffer.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                    for result in results:
-                        cleaned_filename = result['cleanedName']
-                        cleaned_content = processed_files[cleaned_filename]
-                        zipf.writestr(cleaned_filename, cleaned_content)
-                
-                # Store zip file path for download
-                processed_files[zip_filename] = zip_buffer.name
-                
-                # Add zip file to results
-                results.append({
-                    'originalName': 'Multiple Files',
-                    'cleanedName': zip_filename,
-                    'originalSize': sum(r['originalSize'] for r in results[:-1]),
-                    'cleanedSize': sum(r['cleanedSize'] for r in results[:-1]),
-                    'isZip': True
-                })
+                try:
+                    zip_filename = f"cleaned_files_{len(results)}_files.zip"
+                    print(f"DEBUG: Creating zip file: {zip_filename}")
+                    
+                    # Create zip file in memory
+                    zip_buffer = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
+                    with zipfile.ZipFile(zip_buffer.name, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                        for result in results:
+                            cleaned_filename = result['cleanedName']
+                            cleaned_content = processed_files[cleaned_filename]
+                            zip_file.writestr(cleaned_filename, cleaned_content)
+                    
+                    # Store zip file path for download
+                    processed_files[zip_filename] = zip_buffer.name
+                    
+                    # Add zip file to results
+                    results.append({
+                        'originalName': 'Multiple Files',
+                        'cleanedName': zip_filename,
+                        'originalSize': sum(r['originalSize'] for r in results[:-1]),
+                        'cleanedSize': sum(r['cleanedSize'] for r in results[:-1]),
+                        'isZip': True
+                    })
+                    
+                    print(f"DEBUG: Successfully created zip file")
+                    
+                except Exception as zip_error:
+                    print(f"DEBUG: Error creating zip file: {str(zip_error)}")
+                    # Continue without zip file
             
             if not results:
+                print("DEBUG: No valid files processed")
                 return jsonify({'error': 'No valid files processed'}), 400
             
+            print(f"DEBUG: Returning success with {len(results)} results")
             return jsonify({
                 'success': True,
                 'results': results,
@@ -691,7 +729,10 @@ def create_web_server():
             })
             
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            print(f"DEBUG: Unexpected error in process_files: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': f'Server error: {str(e)}'}), 500
     
     @app.route('/api/download/<filename>')
     def download_file(filename):
