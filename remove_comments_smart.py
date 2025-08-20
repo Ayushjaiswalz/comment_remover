@@ -822,7 +822,9 @@ def main():
         print("\nPress Ctrl+C to stop the server")
         
         app = create_web_server()
-        app.run(host='0.0.0.0', port=5000, debug=True)
+        # Get port from environment variable (for Render) or use 5000 for local development
+        port = int(os.environ.get('PORT', 5000))
+        app.run(host='0.0.0.0', port=port, debug=False)
         return
     
     # CLI mode
