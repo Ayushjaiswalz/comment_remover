@@ -22,6 +22,7 @@ import tempfile
 from flask import Flask, request, jsonify, send_file, render_template_string
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
+import datetime
 
 # HTML template for the web UI
 HTML_TEMPLATE = """
@@ -779,42 +780,79 @@ def create_web_server():
     app = Flask(__name__)
     CORS(app)
     
+    # Force JSON responses for all errors
+    app.config['PROPAGATE_EXCEPTIONS'] = True
+    
     # Add error handlers to ensure JSON responses
     @app.errorhandler(400)
     def bad_request(error):
+        print(f"DEBUG: 400 error handler called: {error}")
         return jsonify({'error': 'Bad request', 'details': str(error)}), 400
     
     @app.errorhandler(404)
     def not_found(error):
+        print(f"DEBUG: 404 error handler called: {error}")
         return jsonify({'error': 'Not found', 'details': str(error)}), 404
+    
+    @app.errorhandler(405)
+    def method_not_allowed(error):
+        print(f"DEBUG: 405 error handler called: {error}")
+        return jsonify({'error': 'Method not allowed', 'details': str(error)}), 405
     
     @app.errorhandler(500)
     def internal_error(error):
+        print(f"DEBUG: 500 error handler called: {error}")
         return jsonify({'error': 'Internal server error', 'details': str(error)}), 500
     
     @app.errorhandler(Exception)
     def handle_exception(e):
+        print(f"DEBUG: General exception handler called: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': 'Unhandled exception', 'details': str(e)}), 500
+    
+    # Add before_request to log all requests
+    @app.before_request
+    def log_request_info():
+        print(f"DEBUG: {request.method} {request.path} - Content-Type: {request.content_type}")
+        if request.files:
+            print(f"DEBUG: Files in request: {list(request.files.keys())}")
+        if request.form:
+            print(f"DEBUG: Form data: {list(request.form.keys())}")
     
     @app.route('/')
     def index():
         """Serve the main HTML page"""
+        print("DEBUG: Serving index page")
         return HTML_TEMPLATE
     
     @app.route('/health')
     def health():
         """Health check endpoint"""
+        print("DEBUG: Health check called")
         return jsonify({'status': 'healthy', 'message': 'Server is running'})
     
     @app.route('/test-json')
     def test_json():
         """Test JSON response"""
+        print("DEBUG: Test JSON called")
         return jsonify({'test': True, 'message': 'JSON is working'})
     
     @app.route('/test-simple')
     def test_simple():
         """Test simple text response"""
+        print("DEBUG: Test simple called")
         return "Simple text response - Flask is working"
+    
+    @app.route('/test-upload')
+    def test_upload():
+        """Test endpoint to verify Flask is working"""
+        print("DEBUG: Test upload endpoint called")
+        return jsonify({
+            'status': 'ok',
+            'message': 'Upload endpoint is accessible',
+            'timestamp': str(datetime.datetime.now())
+        })
     
     # Store processed files in memory for direct download
     processed_files = {}
@@ -822,6 +860,7 @@ def create_web_server():
     @app.route('/api/process-files', methods=['POST'])
     def process_files():
         """Process uploaded files and return cleaned versions"""
+        print("DEBUG: ===== /api/process-files START =====")
         try:
             print("DEBUG: /api/process-files called")
             print(f"DEBUG: Request method: {request.method}")
@@ -832,6 +871,7 @@ def create_web_server():
             
             # Ensure this is a POST request
             if request.method != 'POST':
+                print("DEBUG: Method not allowed")
                 return jsonify({'error': 'Method not allowed'}), 405
             
             # Check if files are present
@@ -893,6 +933,8 @@ def create_web_server():
                     
                 except Exception as file_error:
                     print(f"DEBUG: Error processing file {file.filename}: {str(file_error)}")
+                    import traceback
+                    traceback.print_exc()
                     # Continue with other files instead of failing completely
                     continue
             
@@ -926,6 +968,8 @@ def create_web_server():
                     
                 except Exception as zip_error:
                     print(f"DEBUG: Error creating zip file: {str(zip_error)}")
+                    import traceback
+                    traceback.print_exc()
                     # Continue without zip file
             
             if not results:
@@ -939,6 +983,7 @@ def create_web_server():
                 'message': f'Successfully processed {len(results)} file(s)'
             }
             print(f"DEBUG: Response data: {response_data}")
+            print("DEBUG: ===== /api/process-files SUCCESS =====")
             return jsonify(response_data)
             
         except Exception as e:
@@ -947,32 +992,42 @@ def create_web_server():
             traceback.print_exc()
             error_response = {'error': f'Server error: {str(e)}'}
             print(f"DEBUG: Error response: {error_response}")
+            print("DEBUG: ===== /api/process-files ERROR =====")
             return jsonify(error_response), 500
     
     @app.route('/api/download/<filename>')
     def download_file(filename):
         """Download a processed file from memory"""
+        print(f"DEBUG: Download requested for: {filename}")
         try:
             if filename not in processed_files:
+                print(f"DEBUG: File {filename} not found in processed_files")
                 return jsonify({'error': 'File not found'}), 404
             
             file_content = processed_files[filename]
+            print(f"DEBUG: File {filename} found, type: {type(file_content)}")
             
             # Check if it's a zip file (stored as file path) or regular file (stored as content)
             if filename.endswith('.zip'):
                 # It's a zip file - file_content is actually the file path
                 zip_path = file_content
+                print(f"DEBUG: Serving zip file from path: {zip_path}")
                 return send_file(zip_path, as_attachment=True, download_name=filename)
             else:
                 # It's a regular file - file_content is the actual content
+                print(f"DEBUG: Creating temp file for {filename}")
                 # Create a temporary file to serve
                 temp_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=os.path.splitext(filename)[1], encoding='utf-8')
                 temp_file.write(file_content)
                 temp_file.close()
                 
+                print(f"DEBUG: Serving file from temp path: {temp_file.name}")
                 return send_file(temp_file.name, as_attachment=True, download_name=filename)
             
         except Exception as e:
+            print(f"DEBUG: Error in download_file: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return jsonify({'error': str(e)}), 500
     
     return app
@@ -1087,13 +1142,22 @@ def main():
             print(f"DEBUG: Starting Flask app on port {port}")
             print(f"DEBUG: Environment: {os.environ.get('RENDER', 'local')}")
             
-            # Configure for production
+            # Configure for production but ensure JSON responses
             app.config['ENV'] = 'production'
             app.config['DEBUG'] = False
             app.config['TESTING'] = False
+            app.config['PROPAGATE_EXCEPTIONS'] = True
+            
+            # Add global exception handler
+            @app.errorhandler(Exception)
+            def handle_all_exceptions(e):
+                print(f"DEBUG: Global exception handler: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return jsonify({'error': 'Server error', 'details': str(e)}), 500
             
             print("DEBUG: Starting Flask server...")
-            app.run(host='0.0.0.0', port=port, debug=False)
+            app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
             
         except Exception as e:
             print(f"DEBUG: Error starting Flask app: {str(e)}")
